@@ -50,11 +50,24 @@ func Invoke(invocation di.Invocation, options ...di.InvokeOption) error {
 	return App.Invoke(invocation, options...)
 }
 
+func Wrap(options ...di.Option) (*di.Container, error) {
+	c, _ := di.New()
+	c.AddParent(App)
+
+	if err := c.Apply(options...); err != nil {
+		return nil, err
+	}
+
+	return c, nil
+}
+
 func RunE(runE interface{}) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
-		ProvideValue(cmd)
-		ProvideValue(args)
-		ProvideValue(cmd.Context(), di.As(new(context.Context)))
-		return Invoke(runE)
+		c, _ := Wrap(
+			di.ProvideValue(cmd),
+			di.ProvideValue(args),
+			di.ProvideValue(cmd.Context(), di.As(new(context.Context))),
+		)
+		return c.Invoke(runE)
 	}
 }

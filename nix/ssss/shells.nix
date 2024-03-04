@@ -16,13 +16,17 @@ in
         languages.go.enable = true;
 
         packages = with pkgs; [
+          air
           gomod2nix
           surrealdb
         ];
 
         services.surrealdb = {
           enable = true;
+          dbPath = "memory";
         };
+
+        processes.air.exec = "air";
 
         pre-commit.hooks = {
           gomod2nix = {

@@ -28,7 +28,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err := cmd.Execute(); err != nil {
+	if err := lib.Invoke(cmd.RunE); err != nil {
 		log.Fatal(err)
 	}
 }
