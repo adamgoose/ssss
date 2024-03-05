@@ -20,11 +20,19 @@ in
           expect
           gomod2nix
           surrealdb
+          (surrealdb-migrations.overrideAttrs (oldAttrs: {
+            buildInputs = oldAttrs.buildInputs
+              ++ lib.optionals stdenv.isDarwin [ pkgs.darwin.apple_sdk.frameworks.SystemConfiguration ];
+          }))
         ];
 
         services.surrealdb = {
           enable = true;
-          dbPath = "memory";
+          # dbPath = "memory";
+          extraFlags = [
+            "--user=root"
+            "--pass=root"
+          ];
         };
 
         processes.air.exec = "unbuffer air";

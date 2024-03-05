@@ -19,6 +19,13 @@ func main() {
 				return nil, err
 			}
 
+			if _, err = db.Signin(map[string]interface{}{
+				"user": "root",
+				"pass": "root",
+			}); err != nil {
+				return nil, err
+			}
+
 			if _, err = db.Use("test", "test"); err != nil {
 				return nil, err
 			}

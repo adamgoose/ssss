@@ -1,0 +1,10 @@
+[core]
+    path = "./db"
+    schema = "full"
+
+[db]
+    address = "ws://localhost:4222"
+    username = "root"
+    password = "root"
+    ns = "test"
+    db = "test"
