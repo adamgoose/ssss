@@ -5,6 +5,7 @@ import (
 
 	"github.com/adamgoose/ssss/cmd"
 	"github.com/adamgoose/ssss/lib"
+	"github.com/adamgoose/ssss/lib/repository"
 	_ "github.com/corvus-ch/shamir"
 	"github.com/defval/di"
 	"github.com/surrealdb/surrealdb.go"
@@ -24,6 +25,7 @@ func main() {
 
 			return db, nil
 		}),
+		di.ProvideValue(repository.SurrealRepository{}, di.As(new(repository.Repository))),
 	); err != nil {
 		log.Fatal(err)
 	}

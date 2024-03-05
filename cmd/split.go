@@ -1,54 +1,88 @@
 package cmd
 
 import (
-	"bytes"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/adamgoose/ssss/lib/model"
+	"github.com/adamgoose/ssss/lib/repository"
+	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/log"
 	"github.com/charmbracelet/ssh"
-	"github.com/charmbracelet/wish/bubbletea"
 	"github.com/corvus-ch/shamir"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/surrealdb/surrealdb.go"
+	"github.com/spf13/cobra"
 )
 
-func NewSplitProgram(s ssh.Session, db *surrealdb.DB) (p *tea.Program) {
+type (
+	submitMsg      struct{}
+	cancelMsg      struct{}
+	receiveMsg     struct{}
+	receivedAllMsg struct{}
+)
+
+func submit() tea.Msg {
+	return submitMsg{}
+}
+
+func cancel() tea.Msg {
+	return cancelMsg{}
+}
+
+func receive(state interface {
+	ReceiveOne() error
+},
+) tea.Cmd {
+	return func() tea.Msg {
+		log.Info("Receiving a passphrase")
+		state.ReceiveOne()
+		return receiveMsg{}
+	}
+}
+
+func receivedAll() tea.Msg {
+	return receivedAllMsg{}
+}
+
+func RunSplitProgram(s ssh.Session, repo repository.Repository, cmd *cobra.Command) error {
 	pty, _, ok := s.Pty()
 
-	splitTUI := SplitTUI{
-		db:       db,
-		term:     pty.Term,
-		width:    pty.Window.Width,
-		height:   pty.Window.Height,
-		session:  s,
-		user:     s.Context().Value(User{}).(User),
-		renderer: bubbletea.MakeRenderer(s),
+	parts, _ := cmd.Flags().GetInt("parts")
+	threshold, _ := cmd.Flags().GetInt("threshold")
 
-		form: huh.NewForm(
-			huh.NewGroup(
-				huh.NewInput().
-					Key("secret").
-					Title("The Secret to Split"),
-			).
-				WithWidth(pty.Window.Width).
-				WithShowHelp(true),
-			huh.NewGroup(
-				huh.NewInput().
-					Key("passphrase").
-					Title("Your encryption passphrase"),
-				huh.NewInput().
-					Key("confirm").
-					Title("Confirm your encryption passphrase"),
-			).
-				WithWidth(pty.Window.Width).
-				WithShowHelp(true),
-		).
-			WithTheme(huh.ThemeCharm()),
+	splitTUI := SplitTUI{
+		TUI:       NewTUI(s),
+		repo:      repo,
+		progress:  progress.New(progress.WithWidth(pty.Window.Width-2), progress.WithoutPercentage()),
+		parts:     parts,
+		threshold: threshold,
 	}
 
+	splitTUI.form = huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Key("secret").
+				Title("The Secret to Split"),
+		),
+		huh.NewGroup(
+			huh.NewInput().
+				Key("passphrase").
+				Title("Your encryption passphrase"),
+			huh.NewInput().
+				Key("confirm").
+				Title("Confirm your encryption passphrase"),
+		),
+	).
+		WithShowHelp(true).
+		WithSubmitCommand(submit).
+		WithCancelCommand(cancel).
+		WithTheme(huh.ThemeCatppuccin())
+
+	var p *tea.Program
 	if !ok || s.EmulatedPty() {
 		p = tea.NewProgram(splitTUI,
 			tea.WithInput(s),
@@ -61,104 +95,74 @@ func NewSplitProgram(s ssh.Session, db *surrealdb.DB) (p *tea.Program) {
 		)
 	}
 
-	return
+	_, err := p.Run()
+	return err
 }
 
 type SplitTUI struct {
-	db       *surrealdb.DB
-	term     string
-	width    int
-	height   int
-	session  ssh.Session
-	user     User
-	renderer *lipgloss.Renderer
+	TUI
+	repo     repository.Repository
+	form     *huh.Form
+	progress progress.Model
 
-	form       *huh.Form
-	secret     *Secret
+	parts     int
+	threshold int
+
+	secret     *model.Secret
 	splitState *SplitState
 }
 
-type Secret struct {
-	ID   string `json:"id,omitempty"`
-	User string `json:"user"`
-
-	Parts     int       `json:"parts"`
-	Threshold int       `json:"threshold"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
-type Share struct {
-	ID     string `json:"id,omitempty"`
-	Secret string `json:"secret"`
-	User   string `json:"user"`
-
-	Key   byte   `json:"key"`
-	Share []byte `json:"share"`
-}
-
 func (t SplitTUI) Init() tea.Cmd {
-	return t.form.Init()
+	return tea.Batch(
+		t.TUI.Init(),
+		t.form.Init(),
+	)
 }
 
 func (t SplitTUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		t.height = msg.Height
-		t.width = msg.Width
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "ctrl+c":
-			if t.secret != nil && t.secret.Status == "signing" {
-				t.secret.Status = "dead"
-				t.db.Update(t.secret.ID, t.secret)
-			}
-			return t, tea.Quit
-		}
-	}
-
-	form, cmd := t.form.Update(msg)
-	if f, ok := form.(*huh.Form); ok {
-		t.form = f
-	}
-
-	if t.form.State == huh.StateCompleted && t.secret == nil {
-		s := Secret{
+	case submitMsg:
+		s, err := t.repo.Secret().Create(&model.Secret{
 			User:      t.user.ID,
-			Parts:     3,
-			Threshold: 2,
+			Parts:     t.parts,
+			Threshold: t.threshold,
 			Status:    "signing",
 			CreatedAt: time.Now(),
-		}
-
-		data, err := t.db.Create("secrets", &s)
+		})
 		if err != nil {
 			return t, tea.Quit
 		}
 
-		ns := make([]Secret, 1)
-		if err := surrealdb.Unmarshal(data, &ns); err != nil {
-			return t, tea.Quit
-		}
-
-		t.secret = &ns[0]
+		t.secret = s
 		t.splitState = NewSplitState(t.secret.ID, t.secret.Parts)
 		t.splitState.Push(Passphrase{
 			UserID:     t.user.ID,
 			Username:   t.user.Username,
 			Passphrase: t.form.GetString("passphrase"),
 		})
-		t.splitState.Receive()
-	}
 
-	if t.splitState != nil && t.splitState.Len() == t.splitState.Expected {
+		return t, receive(t.splitState)
+	case receiveMsg:
+		log.Info("Received a passphrase")
+
+		// Have I received all the passphrases?
+		if t.splitState.Len() == t.splitState.Expected {
+			return t, receivedAll
+		}
+
+		// Wait for another one
+		return t, receive(t.splitState)
+	case receivedAllMsg:
+
+		log.Info("Received all message")
+
 		// Split the secret
 		shamirShares, err := shamir.Split([]byte(t.form.GetString("secret")), t.secret.Parts, t.secret.Threshold)
 		if err != nil {
 			panic(err)
 		}
 
-		// Encrypt the Shares
+		// Encrypt and store the Shares
 		i := 0
 		for k, v := range shamirShares {
 			pp := t.splitState.Passphrases[i]
@@ -170,114 +174,99 @@ func (t SplitTUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return t, tea.Quit
 			}
 
-			share := Share{
+			t.repo.Share().Create(&model.Share{
 				Secret: t.secret.ID,
 				User:   t.user.ID,
 				Key:    k,
 				Share:  cipher,
-			}
-			spew.Dump(t.db.Create("shares", &share))
+			})
 		}
-		// Store the Shares
 
 		t.secret.Status = "ready"
-		t.db.Update(t.secret.ID, t.secret)
+		t.repo.Secret().Update(t.secret)
 
 		return t, tea.Quit
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "q", "ctrl+c":
+			if t.secret != nil && t.secret.Status == "signing" {
+				t.secret.Status = "dead"
+				t.repo.Secret().Update(t.secret)
+			}
+		}
 	}
 
-	return t, cmd
+	tui, cmd := t.TUI.Update(msg)
+	if tui, ok := tui.(TUI); ok {
+		t.TUI = tui
+		if cmd != nil {
+			return t, cmd
+		}
+	}
+
+	form, cmd := t.form.Update(msg)
+	if f, ok := form.(*huh.Form); ok {
+		t.form = f
+		if cmd != nil {
+			return t, cmd
+		}
+	}
+
+	prog, cmd := t.progress.Update(msg)
+	if p, ok := prog.(progress.Model); ok {
+		t.progress = p
+		if cmd != nil {
+			return t, cmd
+		}
+	}
+
+	return t, nil
+}
+
+type View struct {
+	*strings.Builder
+}
+
+func NewView() *View {
+	return &View{&strings.Builder{}}
+}
+
+func (v View) Colorf(color lipgloss.TerminalColor, format string, a ...interface{}) {
+	v.WriteString(lipgloss.NewStyle().Foreground(color).Render(fmt.Sprintf(format, a...)))
+}
+
+func (v View) NL() {
+	v.WriteRune('\n')
 }
 
 func (t SplitTUI) View() string {
-	b := bytes.NewBuffer(nil)
-
-	b.WriteString("Split a secret into shares\n\n")
-	b.WriteString(fmt.Sprintf("User ID: %s\n\n", t.user.ID))
+	v := NewView()
 
 	if t.secret != nil {
-		spew.Fdump(b, t.secret)
-		spew.Fdump(b, t.splitState)
+		v.Colorf(lipgloss.Color("#0F0"), "Status: %s", t.secret.Status)
+		v.NL()
+
+		if t.secret.Status == "signing" {
+			v.Colorf(lipgloss.Color("#0F0"), "sssc sign %s", t.secret.ID[8:])
+			v.NL()
+			v.WriteString(t.progress.ViewAs(float64(t.splitState.Len()) / float64(t.splitState.Expected)))
+		}
+		if t.secret.Status == "ready" {
+			v.Colorf(lipgloss.Color("#0F0"), "sssc combine %s", t.secret.ID[8:])
+			v.NL()
+		}
+
+		for _, pass := range t.splitState.Passphrases {
+			v.NL()
+			v.Colorf(lipgloss.Color("#AFA"), "User: %s ", pass.Username)
+			v.Colorf(lipgloss.Color("#FAA"), "Length: %d", len(pass.Passphrase))
+		}
+
 	} else {
-		b.WriteString(t.form.View())
+		v.WriteString(
+			t.form.View(),
+		)
 	}
 
-	return b.String()
+	return t.renderer.NewStyle().Width(t.width-2).Border(lipgloss.RoundedBorder(), true).Render(v.String()) + "\n"
 }
-
-// import (
-// 	"fmt"
-//
-// 	"github.com/adamgoose/ssss/lib"
-// 	"github.com/corvus-ch/shamir"
-// 	"github.com/spf13/cobra"
-// 	"github.com/surrealdb/surrealdb.go"
-// )
-//
-// var (
-// 	parts     int
-// 	threshold int
-// )
-//
-// type Secret struct {
-// 	ID        string        `json:"id,omitempty"`
-// 	Parts     int           `json:"parts"`
-// 	Threshold int           `json:"threshold"`
-// 	Shares    []SecretShare `json:"shares"`
-// }
-//
-// type SecretShare struct {
-// 	ID    string `json:"id,omitempty"`
-// 	Label string `json:"label"`
-// 	Key   byte   `json:"key"`
-// 	Share []byte `json:"share"`
-// }
-//
-// var splitCmd = &cobra.Command{
-// 	Use:   "split {secret}",
-// 	Short: "Splits a secret into encrypted shares",
-// 	RunE: lib.RunE(func(args []string, db *surrealdb.DB) error {
-// 		shares := []SecretShare{}
-//
-// 		rawShares, err := shamir.Split([]byte(args[0]), parts, threshold)
-// 		if err != nil {
-// 			return err
-// 		}
-//
-// 		for key, rawShare := range rawShares {
-// 			shares = append(shares, SecretShare{
-// 				Label: fmt.Sprintf("%x", key),
-// 				Key:   key,
-// 				Share: rawShare,
-// 			})
-// 		}
-//
-// 		secret := Secret{
-// 			Parts:     parts,
-// 			Threshold: threshold,
-// 			Shares:    shares,
-// 		}
-//
-// 		data, err := db.Create("secret", secret)
-// 		if err != nil {
-// 			panic(err)
-// 		}
-//
-// 		storedSecret := make([]Secret, 1)
-// 		// storedSecret[0].Shares = make([]SecretShare, parts)
-// 		if err := surrealdb.Unmarshal(data, &storedSecret); err != nil {
-// 			return err
-// 		}
-//
-// 		fmt.Println(storedSecret[0].ID)
-//
-// 		return nil
-// 	}),
-// }
-//
-// func init() {
-// 	rootCmd.AddCommand(splitCmd)
-//
-// 	splitCmd.Flags().IntVarP(&parts, "parts", "p", 3, "Number of parts to split the secret into")
-// 	splitCmd.Flags().IntVarP(&threshold, "threshold", "t", 2, "Number of parts required to reconstruct the secret")
-// }

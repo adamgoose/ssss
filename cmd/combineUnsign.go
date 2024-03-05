@@ -1,45 +1,34 @@
 package cmd
 
 import (
-	"bytes"
-	"fmt"
-
+	"github.com/adamgoose/ssss/lib/model"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
 	"github.com/charmbracelet/ssh"
-	"github.com/charmbracelet/wish/bubbletea"
-	"github.com/surrealdb/surrealdb.go"
 )
 
-func NewUnsignProgram(s ssh.Session, db *surrealdb.DB, cs *CombineState, shares []Share) (p *tea.Program) {
+func RunUnsignProgram(s ssh.Session, cs *CombineState, shares []model.Share) error {
 	pty, _, ok := s.Pty()
 
 	unsignTUI := UnsignTUI{
-		db:       db,
-		term:     pty.Term,
-		width:    pty.Window.Width,
-		height:   pty.Window.Height,
-		session:  s,
-		user:     s.Context().Value(User{}).(User),
-		renderer: bubbletea.MakeRenderer(s),
-
-		form: huh.NewForm(
-			huh.NewGroup(
-				huh.NewInput().
-					Key("passphrase").
-					Title("Your encryption passphrase"),
-			).
-				WithWidth(pty.Window.Width).
-				WithShowHelp(true),
-		).
-			WithTheme(huh.ThemeCharm()),
-
+		TUI:          NewTUI(s),
 		shares:       shares,
 		combineState: cs,
 	}
 
+	unsignTUI.form = huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Key("passphrase").
+				Title("Your encryption passphrase"),
+		),
+	).
+		WithWidth(pty.Window.Width).
+		WithShowHelp(true)
+
+	var p *tea.Program
 	if !ok || s.EmulatedPty() {
 		p = tea.NewProgram(unsignTUI,
 			tea.WithInput(s),
@@ -52,20 +41,15 @@ func NewUnsignProgram(s ssh.Session, db *surrealdb.DB, cs *CombineState, shares 
 		)
 	}
 
-	return
+	_, err := p.Run()
+	return err
 }
 
 type UnsignTUI struct {
-	db       *surrealdb.DB
-	term     string
-	width    int
-	height   int
-	session  ssh.Session
-	user     User
-	renderer *lipgloss.Renderer
+	TUI
+	form *huh.Form
 
-	form         *huh.Form
-	shares       []Share
+	shares       []model.Share
 	combineState *CombineState
 }
 
@@ -126,12 +110,16 @@ func (t UnsignTUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (t UnsignTUI) View() string {
-	b := bytes.NewBuffer(nil)
+	v := NewView()
 
-	b.WriteString("Unsign the secret!\n\n")
-	b.WriteString(fmt.Sprintf("User ID: %s\n\n", t.user.ID))
+	if t.form.State == huh.StateCompleted {
+		v.Colorf(lipgloss.Color("#0F0"), "You unsigned the secret!")
+	} else {
+		v.Colorf(lipgloss.Color("#0F0"), "You are unsigning the secret!")
+	}
+	v.NL()
 
-	b.WriteString(t.form.View())
+	v.WriteString(t.form.View())
 
-	return b.String()
+	return t.renderer.NewStyle().Width(t.width-2).Border(lipgloss.RoundedBorder(), true).Render(v.String()) + "\n"
 }

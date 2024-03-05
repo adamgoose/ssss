@@ -1,46 +1,38 @@
 package cmd
 
 import (
-	"bytes"
-	"fmt"
-
+	"github.com/adamgoose/ssss/lib/repository"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/ssh"
-	"github.com/charmbracelet/wish/bubbletea"
-	"github.com/surrealdb/surrealdb.go"
 )
 
-func NewSignProgram(s ssh.Session, db *surrealdb.DB, ss *SplitState) (p *tea.Program) {
+func RunSignProgram(s ssh.Session, repo repository.Repository, ss *SplitState) error {
 	pty, _, ok := s.Pty()
 
 	signTUI := SignTUI{
-		db:       db,
-		term:     pty.Term,
-		width:    pty.Window.Width,
-		height:   pty.Window.Height,
-		session:  s,
-		user:     s.Context().Value(User{}).(User),
-		renderer: bubbletea.MakeRenderer(s),
-
-		form: huh.NewForm(
-			huh.NewGroup(
-				huh.NewInput().
-					Key("passphrase").
-					Title("Your encryption passphrase"),
-				huh.NewInput().
-					Key("confirm").
-					Title("Confirm your encryption passphrase"),
-			).
-				WithWidth(pty.Window.Width).
-				WithShowHelp(true),
-		).
-			WithTheme(huh.ThemeCharm()),
-
+		TUI:        NewTUI(s),
+		repo:       repo,
 		splitState: ss,
 	}
 
+	signTUI.form = huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Key("passphrase").
+				Title("Your encryption passphrase"),
+			huh.NewInput().
+				Key("confirm").
+				Title("Confirm your encryption passphrase"),
+		),
+	).
+		WithShowHelp(true).
+		WithSubmitCommand(submit).
+		WithCancelCommand(cancel).
+		WithTheme(huh.ThemeCatppuccin())
+
+	var p *tea.Program
 	if !ok || s.EmulatedPty() {
 		p = tea.NewProgram(signTUI,
 			tea.WithInput(s),
@@ -53,20 +45,15 @@ func NewSignProgram(s ssh.Session, db *surrealdb.DB, ss *SplitState) (p *tea.Pro
 		)
 	}
 
-	return
+	_, err := p.Run()
+	return err
 }
 
 type SignTUI struct {
-	db       *surrealdb.DB
-	term     string
-	width    int
-	height   int
-	session  ssh.Session
-	user     User
-	renderer *lipgloss.Renderer
+	TUI
+	repo repository.Repository
 
-	form *huh.Form
-	// secret     *Secret
+	form       *huh.Form
 	splitState *SplitState
 }
 
@@ -75,23 +62,8 @@ func (t SignTUI) Init() tea.Cmd {
 }
 
 func (t SignTUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		t.height = msg.Height
-		t.width = msg.Width
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "ctrl+c":
-			return t, tea.Quit
-		}
-	}
-
-	form, cmd := t.form.Update(msg)
-	if f, ok := form.(*huh.Form); ok {
-		t.form = f
-	}
-
-	if t.form.State == huh.StateCompleted {
+	switch msg.(type) {
+	case submitMsg:
 		t.splitState.Push(Passphrase{
 			UserID:     t.user.ID,
 			Username:   t.user.Username,
@@ -101,16 +73,33 @@ func (t SignTUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return t, tea.Quit
 	}
 
+	tui, cmd := t.TUI.Update(msg)
+	if tui, ok := tui.(TUI); ok {
+		t.TUI = tui
+		if cmd != nil {
+			return t, cmd
+		}
+	}
+
+	form, cmd := t.form.Update(msg)
+	if f, ok := form.(*huh.Form); ok {
+		t.form = f
+	}
+
 	return t, cmd
 }
 
 func (t SignTUI) View() string {
-	b := bytes.NewBuffer(nil)
+	v := NewView()
 
-	b.WriteString("Sign the secret!\n\n")
-	b.WriteString(fmt.Sprintf("User ID: %s\n\n", t.user.ID))
+	if t.form.State == huh.StateCompleted {
+		v.Colorf(lipgloss.Color("#0F0"), "You signed the secret!")
+	} else {
+		v.Colorf(lipgloss.Color("#0F0"), "You are signing the secret!")
+	}
+	v.NL()
 
-	b.WriteString(t.form.View())
+	v.WriteString(t.form.View())
 
-	return b.String()
+	return t.renderer.NewStyle().Width(t.width-2).Border(lipgloss.RoundedBorder(), true).Render(v.String()) + "\n"
 }

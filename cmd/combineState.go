@@ -15,6 +15,7 @@ func NewCombineState(secretId string, expected int) *CombineState {
 		Expected: expected,
 		Shares:   make([]ShamirShare, 0),
 		chanS:    make(chan ShamirShare, expected),
+		chanDone: make(chan error, 1),
 	}
 
 	CombineStates[secretId] = s
@@ -51,4 +52,19 @@ func (c *CombineState) Receive() {
 
 		c.chanDone <- nil
 	}()
+}
+
+func (c *CombineState) ReceiveOne() error {
+	s := <-c.chanS
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.Shares = append(c.Shares, s)
+
+	if len(c.Shares) == c.Expected {
+		c.chanDone <- nil
+	}
+
+	return nil
 }

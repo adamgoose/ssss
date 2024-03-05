@@ -17,6 +17,7 @@ in
 
         packages = with pkgs; [
           air
+          expect
           gomod2nix
           surrealdb
         ];
@@ -26,7 +27,7 @@ in
           dbPath = "memory";
         };
 
-        processes.air.exec = "air";
+        processes.air.exec = "unbuffer air";
 
         pre-commit.hooks = {
           gomod2nix = {

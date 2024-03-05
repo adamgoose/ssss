@@ -1,30 +1,26 @@
 package cmd
 
 import (
+	"github.com/adamgoose/ssss/lib/repository"
+	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/log"
 	"github.com/charmbracelet/ssh"
-	"github.com/charmbracelet/wish/bubbletea"
 	"github.com/corvus-ch/shamir"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/surrealdb/surrealdb.go"
 )
 
-func NewCombineProgram(s ssh.Session, db *surrealdb.DB, cs *CombineState) (p *tea.Program) {
+func RunCombineProgram(s ssh.Session, repo repository.Repository, cs *CombineState) error {
 	pty, _, ok := s.Pty()
 
 	combineTUI := CombineTUI{
-		db:           db,
-		term:         pty.Term,
-		width:        pty.Window.Width,
-		height:       pty.Window.Height,
-		session:      s,
-		user:         s.Context().Value(User{}).(User),
-		renderer:     bubbletea.MakeRenderer(s),
+		TUI:          NewTUI(s),
+		repo:         repo,
+		progress:     progress.New(progress.WithWidth(pty.Window.Width-2), progress.WithoutPercentage()),
 		combineState: cs,
 	}
-	cs.Receive()
 
+	var p *tea.Program
 	if !ok || s.EmulatedPty() {
 		p = tea.NewProgram(combineTUI,
 			tea.WithInput(s),
@@ -37,49 +33,64 @@ func NewCombineProgram(s ssh.Session, db *surrealdb.DB, cs *CombineState) (p *te
 		)
 	}
 
-	return p
+	_, err := p.Run()
+	return err
 }
 
 type CombineTUI struct {
-	db           *surrealdb.DB
-	term         string
-	width        int
-	height       int
-	session      ssh.Session
-	user         User
-	renderer     *lipgloss.Renderer
+	TUI
+	repo     repository.Repository
+	progress progress.Model
+
 	combineState *CombineState
+	secret       *[]byte
 }
 
 func (t CombineTUI) Init() tea.Cmd {
-	return nil
+	return tea.Batch(
+		receive(t.combineState),
+		t.TUI.Init(),
+	)
 }
 
 func (t CombineTUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		t.height = msg.Height
-		t.width = msg.Width
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "ctrl+c":
-			return t, tea.Quit
-		}
-	}
+	switch msg.(type) {
+	case receiveMsg:
+		log.Info("Received a share")
 
-	if t.combineState.Len() == t.combineState.Expected {
+		// Have I received sufficient shares?
+		if t.combineState.Len() == t.combineState.Expected {
+			log.Info("Received all shares")
+			return t, receivedAll
+		}
+
+		// Wait for another one
+		return t, receive(t.combineState)
+	case receivedAllMsg:
 		shares := map[byte][]byte{}
 		for _, share := range t.combineState.Shares {
 			shares[share.Key] = share.Share
 		}
 
-		spew.Dump(shamir.Combine(shares))
+		v, err := shamir.Combine(shares)
+		if err == nil {
+			t.secret = &v
+		}
+
 		return t, tea.Quit
+	}
+
+	tui, cmd := t.TUI.Update(msg)
+	if tui, ok := tui.(TUI); ok {
+		t.TUI = tui
+		if cmd != nil {
+			return t, cmd
+		}
 	}
 
 	return t, nil
 }
 
 func (t CombineTUI) View() string {
-	return spew.Sdump(t.combineState)
+	return spew.Sdump(t.combineState, t.secret)
 }
