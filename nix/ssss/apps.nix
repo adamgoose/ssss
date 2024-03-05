@@ -14,14 +14,5 @@ in
     src = inputs.self;
     modules = "${inputs.self}/gomod2nix.toml";
     doCheck = false;
-
-    # nativeBuildInputs = [
-    #   nixpkgs.makeWrapper
-    # ];
-
-    # postInstall = ''
-    #   wrapProgram $out/bin/hlsdl \
-    #     --prefix PATH : ${nixpkgs.ffmpeg_5-headless}/bin
-    # '';
   };
 }
