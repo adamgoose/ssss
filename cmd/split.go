@@ -14,7 +14,6 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/charmbracelet/ssh"
 	"github.com/corvus-ch/shamir"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/spf13/cobra"
 )
 
@@ -174,7 +173,6 @@ func (t SplitTUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			cipher, err := encrypt(v, pp.Passphrase)
 			if err != nil {
-				spew.Dump(err)
 				return t, tea.Quit
 			}
 

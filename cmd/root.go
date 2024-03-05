@@ -17,17 +17,16 @@ import (
 	"github.com/charmbracelet/wish"
 	"github.com/charmbracelet/wish/activeterm"
 	"github.com/charmbracelet/wish/logging"
-)
-
-const (
-	host = "0.0.0.0"
-	port = "23234"
+	"github.com/spf13/viper"
 )
 
 func RunE(repo repository.Repository) error {
 	s, err := wish.NewServer(
-		wish.WithAddress(net.JoinHostPort(host, port)),
-		wish.WithHostKeyPath(".ssh/id_ed25519"),
+		wish.WithAddress(net.JoinHostPort(
+			viper.GetString("host"),
+			viper.GetString("port"),
+		)),
+		wish.WithHostKeyPath(viper.GetString("host_key_path")),
 		wish.WithPublicKeyAuth(func(ctx ssh.Context, key ssh.PublicKey) bool {
 			return key.Type() == "ssh-ed25519"
 		}),
@@ -71,11 +70,12 @@ func RunE(repo repository.Repository) error {
 	)
 	if err != nil {
 		log.Error("Could not start server", "error", err)
+		return err
 	}
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
-	log.Info("Starting SSH server", "host", host, "port", port)
+	log.Info("Starting SSH server", "host", viper.GetString("host"), "port", viper.GetString("port"))
 	go func() {
 		if err = s.ListenAndServe(); err != nil && !errors.Is(err, ssh.ErrServerClosed) {
 			log.Error("Could not start server", "error", err)
