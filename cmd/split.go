@@ -65,16 +65,23 @@ func RunSplitProgram(s ssh.Session, repo repository.Repository, cmd *cobra.Comma
 	splitTUI.form = huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
+				Key("label").
+				Title("Label").
+				Description("An insecure label for your secret"),
+			huh.NewText().
 				Key("secret").
-				Title("The Secret to Split"),
+				Title("Secret").
+				Description("The secret you want to split"),
 		),
 		huh.NewGroup(
 			huh.NewInput().
 				Key("passphrase").
-				Title("Your encryption passphrase"),
+				Title("Passphrase").
+				Description("A secure passphrase to encrypt your secret"),
 			huh.NewInput().
 				Key("confirm").
-				Title("Confirm your encryption passphrase"),
+				Title("Confirm Passphrase").
+				Description("Confirm your secure passphrase"),
 		),
 	).
 		WithShowHelp(true).
@@ -124,6 +131,7 @@ func (t SplitTUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case submitMsg:
 		s, err := t.repo.Secret().Create(&model.Secret{
 			User:      t.user.ID,
+			Label:     t.form.GetString("label"),
 			Parts:     t.parts,
 			Threshold: t.threshold,
 			Status:    "signing",

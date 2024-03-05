@@ -8,6 +8,7 @@ import (
 
 type SecretRepository interface {
 	Get(id string) (*model.Secret, error)
+	Mine(userID string) ([]model.Secret, error)
 	Create(secret *model.Secret) (*model.Secret, error)
 	Update(secret *model.Secret) error
 }
@@ -32,6 +33,22 @@ func (r SurrealSecretRepository) Get(id string) (*model.Secret, error) {
 	}
 
 	return &secret, nil
+}
+
+func (r SurrealSecretRepository) Mine(userID string) ([]model.Secret, error) {
+	data, err := r.DB.Query("SELECT * FROM secrets WHERE user = $user", map[string]interface{}{
+		"user": userID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := []surrealdb.RawQuery[[]model.Secret]{}
+	if err := surrealdb.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+
+	return result[0].Result, nil
 }
 
 // Create implements SecretRepository.

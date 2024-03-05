@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/adamgoose/ssss/lib"
 	"github.com/adamgoose/ssss/lib/model"
@@ -15,6 +16,24 @@ func NewSSHCmd(sess ssh.Session) *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "sssc",
 		Short: "Interact with ssss over SSH.",
+	}
+
+	lsCmd := &cobra.Command{
+		Use:   "list",
+		Short: "Lists secrets.",
+		RunE: lib.RunE(func(cmd *cobra.Command, repo repository.Repository) error {
+			out := cmd.OutOrStdout()
+			secrets, err := repo.Secret().Mine(sess.Context().Value(model.User{}).(model.User).ID)
+			if err != nil {
+				return err
+			}
+
+			for _, secret := range secrets {
+				fmt.Fprintf(out, "%s\t%d/%d\t%s\t%s\n", secret.ID[8:], secret.Threshold, secret.Parts, secret.Label, secret.CreatedAt.Format("2006-01-02 15:04:05"))
+			}
+
+			return nil
+		}),
 	}
 
 	splitCmd := &cobra.Command{
@@ -127,6 +146,7 @@ func NewSSHCmd(sess ssh.Session) *cobra.Command {
 	splitCmd.Flags().IntP("parts", "p", 3, "How many shares to split the secret into.")
 	splitCmd.Flags().IntP("threshold", "t", 2, "How many shares are required to reconstruct the secret.")
 
+	rootCmd.AddCommand(lsCmd)
 	rootCmd.AddCommand(splitCmd)
 	rootCmd.AddCommand(signCmd)
 	rootCmd.AddCommand(combineCmd)
