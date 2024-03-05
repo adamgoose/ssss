@@ -15,7 +15,34 @@ import (
 func NewSSHCmd(sess ssh.Session) *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "sssc",
-		Short: "Interact with ssss over SSH.",
+		Short: "Split and Combine secrets using Shamir's Secret Sharing Scheme.",
+		Long: `Split and Combine secrets using Shamir's Secret Sharing Scheme.
+
+Get started by creating an alias in your shell:
+  $ alias sssc="ssh -t enge.me --"
+
+Split your first secret:
+  $ sssc split
+  - Provide a label and your secret
+  - Provide the first share encryption passphrase
+  - Share the provided "sign" command with your desired shareholders
+  - The program exits when all shares are signed
+
+Sign a secret being split:
+  $ sssc sign {id}
+  - Provide a passphrase to sign the share
+  - The program exists after signing
+
+Combine shares to recover a secret:
+  $ sssc combine {id}
+  - Share the provvided "unsign" command with your shareholders
+  - The program exits when all shares are unsigned
+
+Unsign a share:
+  $ sssc unsign {id}
+  - Provide the passphrase to unsign the share
+  - The program exists after unsigning
+`,
 	}
 
 	lsCmd := &cobra.Command{

@@ -38,7 +38,6 @@ func receive(state interface {
 },
 ) tea.Cmd {
 	return func() tea.Msg {
-		log.Info("Receiving a passphrase")
 		state.ReceiveOne()
 		return receiveMsg{}
 	}
@@ -153,8 +152,6 @@ func (t SplitTUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return t, receive(t.splitState)
 	case receiveMsg:
-		log.Info("Received a passphrase")
-
 		// Have I received all the passphrases?
 		if t.splitState.Len() == t.splitState.Expected {
 			return t, receivedAll
@@ -163,9 +160,6 @@ func (t SplitTUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Wait for another one
 		return t, receive(t.splitState)
 	case receivedAllMsg:
-
-		log.Info("Received all message")
-
 		// Split the secret
 		shamirShares, err := shamir.Split([]byte(t.form.GetString("secret")), t.secret.Parts, t.secret.Threshold)
 		if err != nil {
