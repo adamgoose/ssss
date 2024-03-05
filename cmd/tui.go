@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/adamgoose/ssss/lib/model"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/ssh"
@@ -12,7 +13,7 @@ type TUI struct {
 	width    int
 	height   int
 	session  ssh.Session
-	user     User
+	user     model.User
 	renderer *lipgloss.Renderer
 }
 
@@ -24,7 +25,7 @@ func NewTUI(s ssh.Session) TUI {
 		width:    pty.Window.Width,
 		height:   pty.Window.Height,
 		session:  s,
-		user:     s.Context().Value(User{}).(User),
+		user:     s.Context().Value(model.User{}).(model.User),
 		renderer: bubbletea.MakeRenderer(s),
 	}
 }

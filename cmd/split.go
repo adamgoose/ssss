@@ -133,6 +133,8 @@ func (t SplitTUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return t, tea.Quit
 		}
 
+		log.Info("Splitting a Secret", "id", s.ID, "user", t.user.ID)
+
 		t.secret = s
 		t.splitState = NewSplitState(t.secret.ID, t.secret.Parts)
 		t.splitState.Push(Passphrase{
@@ -176,7 +178,7 @@ func (t SplitTUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			t.repo.Share().Create(&model.Share{
 				Secret: t.secret.ID,
-				User:   t.user.ID,
+				User:   pp.UserID,
 				Key:    k,
 				Share:  cipher,
 			})
@@ -247,12 +249,14 @@ func (t SplitTUI) View() string {
 		v.NL()
 
 		if t.secret.Status == "signing" {
-			v.Colorf(lipgloss.Color("#0F0"), "sssc sign %s", t.secret.ID[8:])
+			v.WriteString("Ask others to sign their shares with: ")
+			v.Colorf(lipgloss.Color("#0F0"), "ssh -t enge.me -- sign %s", t.secret.ID[8:])
 			v.NL()
 			v.WriteString(t.progress.ViewAs(float64(t.splitState.Len()) / float64(t.splitState.Expected)))
 		}
 		if t.secret.Status == "ready" {
-			v.Colorf(lipgloss.Color("#0F0"), "sssc combine %s", t.secret.ID[8:])
+			v.WriteString("Retrieve your secret with: ")
+			v.Colorf(lipgloss.Color("#0F0"), "ssh -t enge.me -- combine %s", t.secret.ID[8:])
 			v.NL()
 		}
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/adamgoose/ssss/lib"
+	"github.com/adamgoose/ssss/lib/model"
 	"github.com/adamgoose/ssss/lib/repository"
 	"github.com/charmbracelet/ssh"
 	"github.com/defval/di"
@@ -108,7 +109,7 @@ func NewSSHCmd(sess ssh.Session) *cobra.Command {
 			}
 
 			// Load the shares
-			shares, err := repo.Share().MineForSecret(secret.ID, sess.Context().Value(User{}).(User).ID)
+			shares, err := repo.Share().MineForSecret(secret.ID, sess.Context().Value(model.User{}).(model.User).ID)
 			if err != nil {
 				return err
 			}

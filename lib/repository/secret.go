@@ -46,6 +46,14 @@ func (r SurrealSecretRepository) Create(secret *model.Secret) (*model.Secret, er
 		return nil, err
 	}
 
+	data, err = r.DB.Query("RELATE $user->created->$secret", map[string]interface{}{
+		"user":   secret.User,
+		"secret": ns[0].ID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return &ns[0], nil
 }
 

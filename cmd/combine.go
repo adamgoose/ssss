@@ -4,10 +4,10 @@ import (
 	"github.com/adamgoose/ssss/lib/repository"
 	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
 	"github.com/charmbracelet/ssh"
 	"github.com/corvus-ch/shamir"
-	"github.com/davecgh/go-spew/spew"
 )
 
 func RunCombineProgram(s ssh.Session, repo repository.Repository, cs *CombineState) error {
@@ -92,5 +92,17 @@ func (t CombineTUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (t CombineTUI) View() string {
-	return spew.Sdump(t.combineState, t.secret)
+	v := NewView()
+
+	if t.secret != nil {
+		v.WriteString("Your secret is: ")
+		v.Colorf(lipgloss.Color("#0F0"), string(*t.secret))
+	} else {
+		v.WriteString("Ask others to unsign their shares with: ")
+		v.Colorf(lipgloss.Color("#0F0"), "ssh -t enge.me -- unsign %s", t.combineState.SecretID[8:])
+		v.NL()
+		v.WriteString(t.progress.ViewAs(float64(t.combineState.Len()) / float64(t.combineState.Expected)))
+	}
+
+	return t.renderer.NewStyle().Width(t.width-2).Border(lipgloss.RoundedBorder(), true).Render(v.String()) + "\n"
 }

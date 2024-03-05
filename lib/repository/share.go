@@ -46,5 +46,21 @@ func (r SurrealShareRepository) Create(share *model.Share) (*model.Share, error)
 		return nil, err
 	}
 
+	data, err = r.DB.Query("RELATE $secret->split_into->$share", map[string]interface{}{
+		"share":  ns[0].ID,
+		"secret": share.Secret,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	data, err = r.DB.Query("RELATE $user->signed->$share", map[string]interface{}{
+		"user":  share.User,
+		"share": ns[0].ID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return &ns[0], nil
 }
