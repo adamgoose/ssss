@@ -54,7 +54,7 @@ func (t CombineTUI) Init() tea.Cmd {
 }
 
 func (t CombineTUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg.(type) {
+	switch msg := msg.(type) {
 	case receiveMsg:
 		log.Info("Received a share")
 
@@ -77,7 +77,15 @@ func (t CombineTUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			t.secret = &v
 		}
 
+		delete(CombineStates, t.combineState.SecretID)
 		return t, tea.Quit
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "q", "ctrl+c":
+			if t.combineState != nil {
+				delete(CombineStates, t.combineState.SecretID)
+			}
+		}
 	}
 
 	tui, cmd := t.TUI.Update(msg)

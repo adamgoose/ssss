@@ -192,6 +192,7 @@ func (t SplitTUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			})
 		}
 
+		delete(SplitStates, t.secret.ID)
 		t.secret.Status = "ready"
 		t.repo.Secret().Update(t.secret)
 
@@ -200,6 +201,7 @@ func (t SplitTUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "ctrl+c":
 			if t.secret != nil && t.secret.Status == "signing" {
+				delete(SplitStates, t.secret.ID)
 				t.secret.Status = "dead"
 				t.repo.Secret().Update(t.secret)
 			}
