@@ -1,29 +1,24 @@
 package repository
 
-import (
-	"github.com/adamgoose/ssss/lib"
-)
+import "github.com/adamgoose/ssss/lib/model"
 
 type Repository interface {
 	User() UserRepository
 	Share() ShareRepository
 	Secret() SecretRepository
 }
-
-var _ Repository = SurrealRepository{}
-
-type SurrealRepository struct {
-	//
+type UserRepository interface {
+	Upsert(user *model.User) (*model.User, error)
 }
 
-func (r SurrealRepository) User() UserRepository {
-	return lib.MustAutoResolve[SurrealUserRepository]()
+type ShareRepository interface {
+	MineForSecret(secretID string, userID string) ([]model.Share, error)
+	Create(share *model.Share) (*model.Share, error)
 }
 
-func (r SurrealRepository) Share() ShareRepository {
-	return lib.MustAutoResolve[SurrealShareRepository]()
-}
-
-func (r SurrealRepository) Secret() SecretRepository {
-	return lib.MustAutoResolve[SurrealSecretRepository]()
+type SecretRepository interface {
+	Get(id string) (*model.Secret, error)
+	Mine(userID string) ([]model.Secret, error)
+	Create(secret *model.Secret) (*model.Secret, error)
+	Update(secret *model.Secret) error
 }

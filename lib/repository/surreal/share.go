@@ -1,17 +1,10 @@
-package repository
+package surreal
 
 import (
 	"github.com/adamgoose/ssss/lib/model"
 	"github.com/defval/di"
 	"github.com/surrealdb/surrealdb.go"
 )
-
-type ShareRepository interface {
-	MineForSecret(secretID string, userID string) ([]model.Share, error)
-	Create(share *model.Share) (*model.Share, error)
-}
-
-var _ ShareRepository = SurrealShareRepository{}
 
 type SurrealShareRepository struct {
 	di.Inject

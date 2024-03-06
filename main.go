@@ -6,6 +6,7 @@ import (
 	"github.com/adamgoose/ssss/cmd"
 	"github.com/adamgoose/ssss/lib"
 	"github.com/adamgoose/ssss/lib/repository"
+	"github.com/adamgoose/ssss/lib/repository/surreal"
 	_ "github.com/corvus-ch/shamir"
 	"github.com/defval/di"
 	"github.com/spf13/viper"
@@ -33,7 +34,7 @@ func main() {
 
 			return db, nil
 		}),
-		di.ProvideValue(repository.SurrealRepository{}, di.As(new(repository.Repository))),
+		di.ProvideValue(surreal.SurrealRepository{}, di.As(new(repository.Repository))),
 	); err != nil {
 		log.Fatal(err)
 	}

@@ -1,16 +1,10 @@
-package repository
+package surreal
 
 import (
 	"github.com/adamgoose/ssss/lib/model"
 	"github.com/defval/di"
 	"github.com/surrealdb/surrealdb.go"
 )
-
-type UserRepository interface {
-	Upsert(user *model.User) (*model.User, error)
-}
-
-var _ UserRepository = SurrealUserRepository{}
 
 type SurrealUserRepository struct {
 	di.Inject

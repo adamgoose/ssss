@@ -1,19 +1,10 @@
-package repository
+package surreal
 
 import (
 	"github.com/adamgoose/ssss/lib/model"
 	"github.com/defval/di"
 	"github.com/surrealdb/surrealdb.go"
 )
-
-type SecretRepository interface {
-	Get(id string) (*model.Secret, error)
-	Mine(userID string) ([]model.Secret, error)
-	Create(secret *model.Secret) (*model.Secret, error)
-	Update(secret *model.Secret) error
-}
-
-var _ SecretRepository = SurrealSecretRepository{}
 
 type SurrealSecretRepository struct {
 	di.Inject
