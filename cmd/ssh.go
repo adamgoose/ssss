@@ -46,8 +46,9 @@ Unsign a share:
 	}
 
 	lsCmd := &cobra.Command{
-		Use:   "list",
-		Short: "Lists secrets.",
+		Use:     "list",
+		Aliases: []string{"ls"},
+		Short:   "Lists secrets.",
 		RunE: lib.RunE(func(cmd *cobra.Command, repo repository.Repository) error {
 			out := cmd.OutOrStdout()
 			secrets, err := repo.Secret().Mine(sess.Context().Value(model.User{}).(model.User).ID)
